@@ -1,90 +1,79 @@
 debug = true
 
-Sprite = {}
-Sprite.__index = Sprite
-function Sprite.create(imageFile, x, y, tileSizeX, tileSizeY, framerate)
-  local sprite = {}
-  setmetatable(sprite, Sprite)
-  sprite.framerate = framerate
-  sprite.x = x
-  sprite.y = y
-  sprite.speed = 2
-  sprite.image = love.graphics.newImage(imageFile)
-  sprite.width = sprite.image:getWidth()
-  sprite.height = sprite.image:getHeight()
-  sprite.tileSizeX = tileSizeX
-  sprite.tileSizeY = tileSizeY
-  sprite.maxFramesX = sprite.width / sprite.tileSizeX
-  sprite.maxFramesY = sprite.height / sprite.tileSizeY
-  sprite.maxFrames = sprite.maxFramesX * sprite.maxFramesY
-  sprite.currentQuad =  love.graphics.newQuad(0, 0, sprite.tileSizeX,
-                                              sprite.tileSizeY,
-                                sprite.width, sprite.height)
-  sprite.currentFrame = 0
-  return sprite
+Sprite = require 'sprite'
+shine = require 'shine'
+
+Text = {}
+Text.__index = Text
+function Text.create (font, textString, x, y)
+  local text = {}
+  setmetatable(text, Text)
+  text.string = textString
+  text.text = love.graphics.newText(font, textString)
+  text.x = x
+  text.y = y
+  return text
 end
 
-function Sprite:updateFrame()
-  -- if self.currentFrame > sprite.maxFrames then error('Does not compute as frame') end
-  --
-  -- if self.currentFrame > maxFramesX then
-  --   x = sprite.maxFramesY /
-  if frames % self.framerate == 0 then
-    self.currentFrame = self.currentFrame + 1
-    if self.currentFrame == self.maxFrames then
-      self.currentFrame = 0
-    end
-    x = (self.currentFrame % self.maxFramesY) * self.tileSizeX
-    y = math.floor(self.currentFrame / self.maxFramesY) * self.tileSizeY
-
-    self.currentQuad = love.graphics.newQuad(x, y, self.tileSizeX, self.tileSizeY,
-                                  self.width, self.height)
-  end
-end
-
-function Sprite:moveLeft()
-  self.x = self.x - self.speed
-  self:updateFrame()
-end
-
-function Sprite:moveRight()
-  self.x = self.x + self.speed
-  self:updateFrame()
-end
-
-function Sprite:moveUp()
-  self.y = self.y - self.speed
-  self:updateFrame()
-end
-
-function Sprite:moveDown()
-  self.y = self.y + self.speed
-  self:updateFrame()
-end
-
-function Sprite:moveRandomly()
-  if frames % self.framerate == 0 then
-    self.x = self.x + love.math.random(-10, 10)
-    self.y = self.y + love.math.random(-10, 10)
-  end
+function Text:draw ()
+  love.graphics.draw(self.text, self.x, self.y)
 end
 
 function love.load()
-  font = love.graphics.newFont('font.ttf', 20)
-  love.graphics.setDefaultFilter('nearest', 'nearest', 1)
-  moby = Sprite.create('moby.png', 100, 100, 8, 8, 8)
-  ahab = Sprite.create('ahab.png', 300, 300, 8, 8, 8)
 
-  scale = 20
+  -- post processor
+  local grain = shine.filmgrain()
+  grain.opacity = 0.2
+  local desaturate = shine.desaturate{strength = 0.6, tint = {255,250,200}}
+  -- you can chain multiple effects
+  post_effect = grain
+  -- warning - setting parameters affects all chained effects:
+  post_effect.opacity = 0.5 -- affects both vignette and film grain
+
+  local scale = 20
+  local framerate = 8
+  font = love.graphics.newFont('font.ttf', 40)
+  love.graphics.setDefaultFilter('nearest', 'nearest', 1)
+  moby = Sprite.create('moby.png', 100, 100, 8, 8, framerate, scale)
+  ahab = Sprite.create('ahab.png', 0, 0, 8, 8, framerate, scale)
+
   time = 0
   frames = 0
+
+  love.graphics.setBackgroundColor(148, 178, 255, 0.5)
+  width, height, mode = love.window.getMode()
+  wave = love.graphics.newImage('wave.png')
+  waveW = wave:getWidth()
+  waveH = wave:getHeight()
+  TileTable = {
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 }
+  }
+
+  drawables = {}
+  drawables['ahab'] = ahab
+  drawables['ahab-ack'] = Text.create(font, 'AAH! It\'s Moby', 200, 200)
 end
 
 function love.update(dt)
   time = time + dt
   frames = frames + 1
-
-  ahab:moveRandomly()
+  
+  if time < 2 then
+    drawables['ahab'].scale = drawables['ahab'].scale + 0.5
+  elseif (time > 2 and time < 3)  then
+    drawables['ahab'] = nil
+    drawables['ahab-ack'] = nil
+  end
+  if time > 2 then
+    drawables['moby'] = moby
+    drawables['ahab'] = nil
+  end
 
   if love.keyboard.isDown("a") then
     moby:moveLeft()
@@ -100,8 +89,25 @@ function love.update(dt)
   end
 end
 
+function draw()
+  for rowIndex=1, #TileTable do
+    local row = TileTable[rowIndex]
+    for columnIndex=1, #row do
+      local number = row[columnIndex]
+      love.graphics.draw(wave, (columnIndex - 1) * waveW, (rowIndex - 1) * waveH)
+    end
+  end
+
+  for k,drawable in pairs(drawables) do
+    if k ~= nill then
+      print(k)
+      drawable:draw()
+    end
+  end
+end
+
 function love.draw()
-  love.graphics.draw(moby.image, moby.currentQuad, moby.x, moby.y, 0, scale, scale)
-  love.graphics.draw(ahab.image, ahab.currentQuad, ahab.x, ahab.y, 0, scale, scale)
-  -- love.graphics.rectangle('fill', 100, 100, 20, 20)
+  post_effect:draw(function()
+        draw()
+    end)
 end
